@@ -1,0 +1,148 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Jose Zubcoff"
+date: "22/March/2015"
+output: html_document
+---
+
+####Background
+
+Using wearable devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (The data for this project also come from this source). 
+
+
+####Data 
+
+
+The training data for this project are available here: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+####Objectives
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We used all other variables to predict "classe". 
+
+####How the model was built 
+First, load the required packages.
+```{r load_packages}
+#install.packages("caret")
+#install.packages("e1071")
+#install.packages("randomForest")
+#install.packages("rpart")
+library(randomForest)
+library(caret)
+library(e1071)
+library(rpart)
+```
+
+```{r load_training_data}
+# load data
+
+if (!"training" %in% ls()) {
+training <- read.csv("~/Dropbox/box documents/coursera/PML/pml-training.csv", na.strings=c("#DIV/0!"), row.names = 1, strip.white=TRUE)
+}
+dim(training)
+str(training)
+```
+```{r load_testing_data}
+if (!"testing" %in% ls()) {
+testing <- read.csv("~/Dropbox/box documents/coursera/PML/pml-testing.csv", na.strings=c("#DIV/0!"), row.names = 1, strip.white=TRUE)
+}
+dim(testing)
+str(testing)
+```
+Due to the high presence of NA's values, we will clean the data.
+```{r NA_cleaning}
+training <- training[, 6:dim(training)[2]]
+
+treshold <- dim(training)[1] * 0.9
+#Remove columns with more than 90% of NA or "" values
+clean_variables <- !apply(training, 2, function(x) sum(is.na(x)) > treshold  || sum(x=="") > treshold)
+
+training <- training[, clean_variables]
+
+variables_with_near_zero_values <- nearZeroVar(training, saveMetrics = TRUE)
+
+training <- training[, variables_with_near_zero_values$nzv==FALSE]
+```
+
+
+```{r modeling}
+training$classe = factor(training$classe)
+training_data <- createDataPartition(training$classe, p = 0.6)[[1]]
+```
+
+```{r cross_val_data}
+cross_val_data <- training[-training_data,]
+training <- training[ training_data,]
+```
+
+```{r training_data}
+training_data <- createDataPartition(cross_val_data$classe, p = 0.75)[[1]]
+```
+
+```{r cross_val_test_data}
+cross_val_data_test <- cross_val_data[ -training_data,]
+cross_val_data <- cross_val_data[training_data,]
+```
+```{r testing}
+
+testing <- testing[, 6:dim(testing)[2]]
+testing <- testing[, clean_variables]
+testing$classe <- NA
+testing <- testing[, variables_with_near_zero_values$nzv==FALSE]
+```
+
+####Modeling with decision trees 
+```{r decision_trees}
+
+decision_trees_model <- rpart(classe ~ ., data=training, method="class")
+
+prediction_from_dt <- predict(decision_trees_model, cross_val_data_test, type = "class")
+
+str(prediction_from_dt)
+str(testing)
+
+confusionMatrix(prediction_from_dt, cross_val_data_test$classe)
+```
+
+####Modeling and cross validating 
+```{r random_forest}
+random_forest_model <- train(classe ~ ., data=training, method="rf")
+
+prediction_from_rfm <- predict(random_forest_model, cross_val_data)
+
+confusionMatrix(prediction_from_rfm, cross_val_data$classe)
+```
+
+####Prediction of 20 different test cases 
+
+```{r predict_final}
+# predict outcome levels on the original Testing data set using Random Forest algorithm
+predict_final <- predict(random_forest_model, cross_val_data_test, type="class")
+predict_final
+
+```
+The Random Forest algorithm performed better (higher accuracy, 0.995) than Decision Trees (accuracy=0.7) to classify the data from <http://groupware.les.inf.puc-rio.br/har>.
+
+####Estimation of errors
+The expected out-of-sample error is very low (0.5%). The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. Our Test data set comprises 20 cases. With an accuracy above 99% on our cross-validation data, we can expect almost zero misclassifications of the test samples.
+
+####Submission
+```{r write_submission}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictfinal)
+```
+
+
