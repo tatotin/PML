@@ -40,35 +40,30 @@ library(rpart)
 
 ```{r load_training_data}
 # load data
-
-if (!"training" %in% ls()) {
+setwd("~/Dropbox/box documents/coursera/PML/")
+#if (!"training" %in% ls()) {
 training <- read.csv("~/Dropbox/box documents/coursera/PML/pml-training.csv", na.strings=c("#DIV/0!"), row.names = 1, strip.white=TRUE)
-}
+#}
 dim(training)
 str(training)
 ```
 ```{r load_testing_data}
-if (!"testing" %in% ls()) {
+#if (!"testing" %in% ls()) {
 testing <- read.csv("~/Dropbox/box documents/coursera/PML/pml-testing.csv", na.strings=c("#DIV/0!"), row.names = 1, strip.white=TRUE)
-}
+#}
 dim(testing)
 str(testing)
 ```
 Due to the high presence of NA's values, we will clean the data.
 ```{r NA_cleaning}
 training <- training[, 6:dim(training)[2]]
-
 treshold <- dim(training)[1] * 0.9
 #Remove columns with more than 90% of NA or "" values
 clean_variables <- !apply(training, 2, function(x) sum(is.na(x)) > treshold  || sum(x=="") > treshold)
-
 training <- training[, clean_variables]
-
 variables_with_near_zero_values <- nearZeroVar(training, saveMetrics = TRUE)
-
 training <- training[, variables_with_near_zero_values$nzv==FALSE]
 ```
-
 
 ```{r modeling}
 training$classe = factor(training$classe)
@@ -81,7 +76,7 @@ training <- training[ training_data,]
 ```
 
 ```{r training_data}
-training_data <- createDataPartition(cross_val_data$classe, p = 0.75)[[1]]
+#training_data <- createDataPartition(cross_val_data$classe, p = 0.75)[[1]]
 ```
 
 ```{r cross_val_test_data}
@@ -89,33 +84,29 @@ cross_val_data_test <- cross_val_data[ -training_data,]
 cross_val_data <- cross_val_data[training_data,]
 ```
 ```{r testing}
-
 testing <- testing[, 6:dim(testing)[2]]
-testing <- testing[, clean_variables]
+testing <- testing[,clean_variables]
 testing$classe <- NA
 testing <- testing[, variables_with_near_zero_values$nzv==FALSE]
 ```
 
 ####Modeling with decision trees 
 ```{r decision_trees}
-
 decision_trees_model <- rpart(classe ~ ., data=training, method="class")
-
 prediction_from_dt <- predict(decision_trees_model, cross_val_data_test, type = "class")
-
-str(prediction_from_dt)
-str(testing)
-
-confusionMatrix(prediction_from_dt, cross_val_data_test$classe)
+cm_dt <-confusionMatrix(prediction_from_dt, cross_val_data_test$classe)
+cm_dt
 ```
 
 ####Modeling and cross validating 
 ```{r random_forest}
-random_forest_model <- train(classe ~ ., data=training, method="rf")
-
+#random_forest_model <- train(classe ~ ., data=training, method="rf")
+random_forest_model <- randomForest(classe ~ ., data=training)
+summary(random_forest_model)
 prediction_from_rfm <- predict(random_forest_model, cross_val_data)
-
-confusionMatrix(prediction_from_rfm, cross_val_data$classe)
+summary(prediction_from_rfm)
+cm_rfm <-confusionMatrix(prediction_from_rfm, cross_val_data$classe)
+cm_rfm
 ```
 
 ####Prediction of 20 different test cases 
@@ -124,12 +115,12 @@ confusionMatrix(prediction_from_rfm, cross_val_data$classe)
 # predict outcome levels on the original Testing data set using Random Forest algorithm
 predict_final <- predict(random_forest_model, cross_val_data_test, type="class")
 predict_final
-
+summary(predict_final)
 ```
-The Random Forest algorithm performed better (higher accuracy, 0.995) than Decision Trees (accuracy=0.7) to classify the data from <http://groupware.les.inf.puc-rio.br/har>.
+The Random Forest algorithm performed better (higher accuracy, `r cm_rfm$overall['Accuracy']`) than Decision Trees (accuracy=`r cm_dt$overall['Accuracy']`) to classify the data from <http://groupware.les.inf.puc-rio.br/har>.
 
 ####Estimation of errors
-The expected out-of-sample error is very low (0.5%). The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. Our Test data set comprises 20 cases. With an accuracy above 99% on our cross-validation data, we can expect almost zero misclassifications of the test samples.
+The expected out-of-sample error is very low (`r (1-cm_rfm$overall['Accuracy'])*100`%). The expected out-of-sample error is calculated as (1-accuracy) for predictions made against the cross-validation set. Our test dataset comprises 20 cases. With an accuracy above 99% on our cross-validation data, we can expect almost zero misclassifications of the test samples.
 
 ####Submission
 ```{r write_submission}
@@ -142,7 +133,7 @@ pml_write_files = function(x){
   }
 }
 
-pml_write_files(predictfinal)
+pml_write_files(predict_final)
 ```
 
 
